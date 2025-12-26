@@ -1,0 +1,23 @@
+{
+  "name": "userland-register",
+  "version": "1.0.0",
+  "description": "A userland polyfill for module.register() using module.registerHooks() and Worker threads",
+  "main": "index.js",
+  "type": "module",
+  "exports": {
+    ".": "./index.js",
+    "./ponyfill": "./ponyfill.js"
+  },
+  "files": [
+    "index.js",
+    "register.js",
+    "worker.js"
+  ],
+  "keywords": [
+    "esm",
+    "loader",
+    "hooks",
+    "module"
+  ],
+  "license": "MIT"
+}
