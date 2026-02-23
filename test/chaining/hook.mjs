@@ -4,7 +4,7 @@
 let tag = 'hook-a';
 
 export function initialize(data) {
-  if (data && data.tag) {
+  if (data?.tag) {
     tag = data.tag;
   }
 }

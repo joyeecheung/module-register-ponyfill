@@ -64,7 +64,4 @@ export function register(
  *   is resolved relative to `options.parentURL`.
  * @param options - Options including `parentURL`, `data`, and `transferList`.
  */
-export function register(
-  specifier: string | URL,
-  options?: RegisterOptions,
-): RegisterReturn;
+export function register(specifier: string | URL, options?: RegisterOptions): RegisterReturn;

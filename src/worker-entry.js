@@ -2,15 +2,15 @@
 // Loads hook modules, runs resolve/load chains, and communicates with the
 // main thread via MessagePort + Atomics.
 
-import { workerData, receiveMessageOnPort } from 'node:worker_threads';
-import { WORKER_TO_MAIN, MAIN_TO_WORKER, MSG } from './constants.js';
+import { receiveMessageOnPort, workerData } from 'node:worker_threads';
+import { MSG, WORKER_TO_MAIN } from './constants.js';
 import { serializeError } from './errors.js';
 import {
-  pluckHooks,
-  createDefaultResolve,
   createDefaultLoad,
-  runResolveChain,
+  createDefaultResolve,
+  pluckHooks,
   runLoadChain,
+  runResolveChain,
 } from './hook-chain.js';
 
 const { lock: lockBuffer, port } = workerData;
@@ -148,7 +148,7 @@ async function handleLoad(msg) {
 
   // Transfer ArrayBuffer/TypedArray sources to avoid copying.
   const transferList = [];
-  if (result && result.source) {
+  if (result?.source) {
     if (result.source instanceof ArrayBuffer) {
       transferList.push(result.source);
     } else if (ArrayBuffer.isView(result.source) && result.source.buffer instanceof ArrayBuffer) {

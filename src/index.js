@@ -2,18 +2,24 @@
 // Exports a drop-in replacement for module.register() that uses
 // module.registerHooks() + a worker thread + Atomics.
 
-import { Worker, MessageChannel, receiveMessageOnPort } from 'node:worker_threads';
 import { registerHooks } from 'node:module';
-import { WORKER_TO_MAIN, MAIN_TO_WORKER, SHARED_MEMORY_BYTES, MSG, WAIT_TIMEOUT_MS } from './constants.js';
+import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
+import {
+  MAIN_TO_WORKER,
+  MSG,
+  SHARED_MEMORY_BYTES,
+  WAIT_TIMEOUT_MS,
+  WORKER_TO_MAIN,
+} from './constants.js';
 import { deserializeError, serializeError } from './errors.js';
 
 // Singleton state -- shared across all register() calls.
-let lock = null;       // Int32Array over SharedArrayBuffer
-let port1 = null;      // MessagePort -- main thread side
-let worker = null;     // Worker instance
+let lock = null; // Int32Array over SharedArrayBuffer
+let port1 = null; // MessagePort -- main thread side
+let worker = null; // Worker instance
 let initialized = false;
 let hooksRegistered = false;
-let lastWorkerId = 0;  // Tracks worker's notification counter
+let lastWorkerId = 0; // Tracks worker's notification counter
 
 // Whether any hooks with resolve/load have been registered.
 let hasResolveHooks = false;
@@ -32,7 +38,7 @@ function waitForWorkerResponse(expectedType) {
     if (waitResult === 'timed-out') {
       throw new Error(
         `Timed out waiting for hook worker response after ${WAIT_TIMEOUT_MS}ms. ` +
-        'The worker may have crashed or a hook may be hanging.'
+          'The worker may have crashed or a hook may be hanging.',
       );
     }
     lastWorkerId = Atomics.load(lock, WORKER_TO_MAIN);
@@ -46,8 +52,10 @@ function waitForWorkerResponse(expectedType) {
       throw deserializeError(msg.error);
     }
     if (msg.type === MSG.NEVER_SETTLE) {
-      throw new Error('Hook worker exited without settling the response. ' +
-        'A hook may have returned a promise that never resolved.');
+      throw new Error(
+        'Hook worker exited without settling the response. ' +
+          'A hook may have returned a promise that never resolved.',
+      );
     }
 
     if (!expectedType || msg.type === expectedType) {
@@ -117,7 +125,7 @@ function ensureWorker() {
   const readyResult = Atomics.wait(lock, WORKER_TO_MAIN, 0, WAIT_TIMEOUT_MS);
   if (readyResult === 'timed-out') {
     throw new Error(
-      `Timed out waiting for hook worker to become ready after ${WAIT_TIMEOUT_MS}ms.`
+      `Timed out waiting for hook worker to become ready after ${WAIT_TIMEOUT_MS}ms.`,
     );
   }
   lastWorkerId = Atomics.load(lock, WORKER_TO_MAIN);
@@ -208,7 +216,7 @@ function runBidirectionalLoop(nextResolve, nextLoad, expectedResultType) {
     if (waitResult === 'timed-out') {
       throw new Error(
         `Timed out waiting for hook worker response after ${WAIT_TIMEOUT_MS}ms. ` +
-        'The worker may have crashed or a hook may be hanging.'
+          'The worker may have crashed or a hook may be hanging.',
       );
     }
     lastWorkerId = Atomics.load(lock, WORKER_TO_MAIN);
@@ -223,8 +231,10 @@ function runBidirectionalLoop(nextResolve, nextLoad, expectedResultType) {
     }
 
     if (msg.type === MSG.NEVER_SETTLE) {
-      throw new Error('Hook worker exited without settling the response. ' +
-        'A hook may have returned a promise that never resolved.');
+      throw new Error(
+        'Hook worker exited without settling the response. ' +
+          'A hook may have returned a promise that never resolved.',
+      );
     }
 
     if (msg.type === expectedResultType) {
@@ -265,7 +275,6 @@ function runBidirectionalLoop(nextResolve, nextLoad, expectedResultType) {
           error: serializeError(err),
         });
       }
-      continue;
     }
 
     // Unknown message -- ignore and keep waiting.
@@ -290,9 +299,11 @@ export function register(specifier, parentURLOrOptions, options) {
   let data;
   let transferList;
 
-  if (parentURLOrOptions !== undefined &&
-      typeof parentURLOrOptions === 'object' &&
-      !isURL(parentURLOrOptions)) {
+  if (
+    parentURLOrOptions !== undefined &&
+    typeof parentURLOrOptions === 'object' &&
+    !isURL(parentURLOrOptions)
+  ) {
     // 2-arg form: register(specifier, { parentURL, data, transferList })
     options = parentURLOrOptions;
     parentURL = options.parentURL;
@@ -350,10 +361,10 @@ export function register(specifier, parentURLOrOptions, options) {
 
   // Track what kind of hooks were registered so the proxies know
   // whether to delegate to the worker or short-circuit.
-  if (response.result && response.result.hasResolve) {
+  if (response.result?.hasResolve) {
     hasResolveHooks = true;
   }
-  if (response.result && response.result.hasLoad) {
+  if (response.result?.hasLoad) {
     hasLoadHooks = true;
   }
   // If the response doesn't have hook info (e.g. older protocol), assume both.

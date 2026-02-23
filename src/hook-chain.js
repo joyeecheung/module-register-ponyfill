@@ -3,8 +3,7 @@
 // that delegates back to the main thread via Atomics.
 
 import { receiveMessageOnPort } from 'node:worker_threads';
-import { MAIN_TO_WORKER, WORKER_TO_MAIN, MSG, WAIT_TIMEOUT_MS } from './constants.js';
-import { serializeError } from './errors.js';
+import { MAIN_TO_WORKER, MSG, WAIT_TIMEOUT_MS, WORKER_TO_MAIN } from './constants.js';
 
 /**
  * Create a "default resolve" function that asks the main thread for the
@@ -68,9 +67,7 @@ function waitForMainResponse(port, lock, state, expectedType) {
   while (true) {
     const waitResult = Atomics.wait(lock, MAIN_TO_WORKER, state.lastMainId, WAIT_TIMEOUT_MS);
     if (waitResult === 'timed-out') {
-      throw new Error(
-        `Timed out waiting for main thread response after ${WAIT_TIMEOUT_MS}ms.`
-      );
+      throw new Error(`Timed out waiting for main thread response after ${WAIT_TIMEOUT_MS}ms.`);
     }
     state.lastMainId = Atomics.load(lock, MAIN_TO_WORKER);
 
@@ -119,9 +116,7 @@ export async function runResolveChain(hooks, defaultResolve, specifier, context)
   // Build the chain: last registered hook runs first (LIFO).
   // chain[0] = defaultResolve wrapper
   // chain[i+1] = resolveHooks[i] with next = chain[i]
-  const chain = [
-    async (spec, ctx) => defaultResolve(spec, ctx),
-  ];
+  const chain = [async (spec, ctx) => defaultResolve(spec, ctx)];
 
   for (let i = 0; i < resolveHooks.length; i++) {
     const hookFn = resolveHooks[i];
@@ -158,9 +153,7 @@ export async function runLoadChain(hooks, defaultLoad, url, context) {
     return defaultLoad(url, context);
   }
 
-  const chain = [
-    async (u, ctx) => defaultLoad(u, ctx),
-  ];
+  const chain = [async (u, ctx) => defaultLoad(u, ctx)];
 
   for (let i = 0; i < loadHooks.length; i++) {
     const hookFn = loadHooks[i];

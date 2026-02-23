@@ -17,7 +17,11 @@
     "src/"
   ],
   "scripts": {
-    "test": "node --test 'test/*/test.mjs'"
+    "test": "node --test 'test/*/test.mjs'",
+    "lint": "biome check",
+    "lint:changed": "biome check $(git diff --name-only main --diff-filter=ACMR)",
+    "lint:fix": "biome check --fix",
+    "format": "biome format --write"
   },
   "engines": {
     "node": ">=22.15.0"
@@ -30,5 +34,8 @@
     "ponyfill",
     "esm"
   ],
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@biomejs/biome": "2.4.4"
+  }
 }

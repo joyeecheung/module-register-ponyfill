@@ -1,11 +1,11 @@
 // A hook that uses initialize() to receive data and a MessagePort.
 
-let receivedData = null;
+let _receivedData = null;
 
 export function initialize(data) {
-  receivedData = data;
+  _receivedData = data;
   // If a port was provided, send an ack back.
-  if (data && data.port) {
+  if (data?.port) {
     data.port.postMessage({ ack: true, greeting: data.greeting });
   }
 }
