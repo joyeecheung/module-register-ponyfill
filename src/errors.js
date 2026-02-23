@@ -1,4 +1,11 @@
 // Error serialization / deserialization for cross-thread transfer.
+//
+// Reference: Node.js internal/error_serdes
+// https://github.com/nodejs/node/blob/6b5178f7/lib/internal/error_serdes.js
+//
+// Node.js uses a more sophisticated V8-level serialization via
+// serializeError/deserializeError in error_serdes.js. We use a simplified
+// plain-object approach since structured clone handles the transfer.
 
 /**
  * Serialize an error into a plain object suitable for structured clone.

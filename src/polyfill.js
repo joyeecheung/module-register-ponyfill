@@ -2,6 +2,9 @@
 // Patches `module.register` with the polyfill implementation so that
 // existing code using `module.register()` works without modification.
 //
+// In Node.js, module.register is wired in lib/module.js:
+// https://github.com/nodejs/node/blob/6b5178f7/lib/module.js#L25
+//
 // IMPORTANT: This module must be loaded before any register() calls.
 // Use --import to guarantee it runs first, or place the import before
 // any module that calls register().

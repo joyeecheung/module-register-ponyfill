@@ -1,17 +1,20 @@
 // Worker thread entry point.
 // Loads hook modules, runs resolve/load chains, and communicates with the
 // main thread via MessagePort + Atomics.
+//
+// Mirrors Node.js's worker.js (customizedModuleWorker + handleMessage):
+// https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js
+//
+// Key differences:
+// - We use a user-land Worker + MessagePort instead of InternalWorker + syncCommPort.
+// - Hook chain management is delegated to AsyncLoaderHooksOnLoaderHookWorker
+//   (in hooks.js), matching Node.js's architecture.
+// - We support deregister (not available in native Node.js).
 
 import { receiveMessageOnPort, workerData } from 'node:worker_threads';
 import { MSG, WORKER_TO_MAIN } from './constants.js';
 import { serializeError } from './errors.js';
-import {
-  createDefaultLoad,
-  createDefaultResolve,
-  pluckHooks,
-  runLoadChain,
-  runResolveChain,
-} from './hook-chain.js';
+import { AsyncLoaderHooksOnLoaderHookWorker } from './hooks.js';
 
 const { lock: lockBuffer, port } = workerData;
 const lock = new Int32Array(lockBuffer);
@@ -20,16 +23,16 @@ const lock = new Int32Array(lockBuffer);
 // detect new notifications via Atomics.wait.
 const state = { lastMainId: 0 };
 
-// Registered hook modules, in registration order.
-// Chains run LIFO: last registered hook runs first.
-const hooks = [];
-
-// Default resolve/load that delegate back to the main thread.
-const defaultResolve = createDefaultResolve(port, lock, state);
-const defaultLoad = createDefaultLoad(port, lock, state);
+// The loader instance that holds the hook chains and runs them.
+// Mirrors the AsyncLoaderHooksOnLoaderHookWorker instance in Node.js's worker:
+// https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L62
+const loader = new AsyncLoaderHooksOnLoaderHookWorker(port, lock, state);
 
 /**
  * Notify the main thread that a message is ready.
+ *
+ * Mirrors the AtomicsAdd + AtomicsNotify pattern in Node.js's handleMessage:
+ * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L280-L281
  */
 function notifyMain() {
   Atomics.add(lock, WORKER_TO_MAIN, 1);
@@ -38,6 +41,10 @@ function notifyMain() {
 
 /**
  * Send a success response to the main thread.
+ *
+ * Mirrors wrapMessage('success', response) + postMessage in Node.js:
+ * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L109-L141
+ *
  * @param {string} type
  * @param {object} [result]
  * @param {Transferable[]} [transferList]
@@ -66,6 +73,10 @@ function sendError(err) {
 
 /**
  * Handle a message from the main thread.
+ *
+ * Mirrors handleMessage() in Node.js's worker.js:
+ * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L226-L282
+ *
  * @param {object} msg
  */
 async function handleMessage(msg) {
@@ -93,26 +104,16 @@ async function handleMessage(msg) {
 
 /**
  * Register a new hook module.
+ *
+ * Delegates to AsyncLoaderHooksOnLoaderHookWorker#register, which mirrors
+ * Node.js's register + addCustomLoader:
+ * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/hooks.js#L173-L213
+ *
  * @param {{ specifier: string, parentURL: string, data?: any }} msg
  */
 async function handleRegister(msg) {
-  const resolvedURL = new URL(msg.specifier, msg.parentURL).href;
-  const hookModule = await import(resolvedURL);
-  const extracted = pluckHooks(hookModule);
-
-  // Call initialize() with the data from the register() call.
-  if (extracted.initialize) {
-    await extracted.initialize(msg.data);
-  }
-
-  const hookId = hooks.length;
-  extracted._id = hookId;
-  hooks.push(extracted);
-  sendResult(MSG.REGISTER_RESULT, {
-    hookId,
-    hasResolve: typeof extracted.resolve === 'function',
-    hasLoad: typeof extracted.load === 'function',
-  });
+  const result = await loader.register(msg.specifier, msg.parentURL, msg.data);
+  sendResult(MSG.REGISTER_RESULT, result);
 }
 
 /**
@@ -120,14 +121,8 @@ async function handleRegister(msg) {
  * @param {{ hookId: number }} msg
  */
 function handleDeregister(msg) {
-  const idx = hooks.findIndex((h) => h._id === msg.hookId);
-  if (idx !== -1) {
-    hooks.splice(idx, 1);
-  }
-  sendResult(MSG.DEREGISTER_RESULT, {
-    hasResolve: hooks.some((h) => typeof h.resolve === 'function'),
-    hasLoad: hooks.some((h) => typeof h.load === 'function'),
-  });
+  const result = loader.deregister(msg.hookId);
+  sendResult(MSG.DEREGISTER_RESULT, result);
 }
 
 /**
@@ -135,7 +130,7 @@ function handleDeregister(msg) {
  * @param {{ specifier: string, context: object }} msg
  */
 async function handleResolve(msg) {
-  const result = await runResolveChain(hooks, defaultResolve, msg.specifier, msg.context);
+  const result = await loader.resolve(msg.specifier, msg.context);
   sendResult(MSG.RESOLVE_RESULT, result);
 }
 
@@ -144,7 +139,7 @@ async function handleResolve(msg) {
  * @param {{ url: string, context: object }} msg
  */
 async function handleLoad(msg) {
-  const result = await runLoadChain(hooks, defaultLoad, msg.url, msg.context);
+  const result = await loader.load(msg.url, msg.context);
 
   // Transfer ArrayBuffer/TypedArray sources to avoid copying.
   const transferList = [];
@@ -160,7 +155,9 @@ async function handleLoad(msg) {
 }
 
 // --- Message polling loop ---
-// Use dual-mode: event-based + setImmediate polling, mirroring Node.js internals.
+// Use dual-mode: event-based + setImmediate polling, mirroring Node.js's
+// checkForMessages pattern in the worker:
+// https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L186-L195
 
 let isProcessingMessage = false;
 
@@ -192,6 +189,8 @@ port.on('message', (msg) => {
 });
 
 // Handle beforeExit: notify main about unsettled hooks.
+// Mirrors the unsettledResponsePorts + 'never-settle' pattern in Node.js:
+// https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L197-L215
 process.on('beforeExit', () => {
   port.postMessage({ type: MSG.NEVER_SETTLE });
   notifyMain();

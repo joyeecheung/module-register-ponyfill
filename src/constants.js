@@ -1,11 +1,19 @@
 // Shared constants between main thread and worker thread.
+//
+// Reference: Node.js shared_constants.js
+// https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/shared_constants.js
 
 // Int32Array indices in the SharedArrayBuffer.
 // Each is a monotonically increasing notification counter.
+//
+// In Node.js, only WORKER_TO_MAIN_THREAD_NOTIFICATION exists (index 0) with a
+// single Int32. We add MAIN_TO_WORKER (index 1) for bidirectional blocking
+// because our worker needs to block on main-thread default resolve/load.
 export const WORKER_TO_MAIN = 0;
 export const MAIN_TO_WORKER = 1;
 
 // Total bytes: 2 x Int32 = 8 bytes.
+// Node.js uses SHARED_MEMORY_BYTE_LENGTH = 1 * 4 (unidirectional).
 export const SHARED_MEMORY_BYTES = 2 * 4;
 
 // Maximum milliseconds to block on Atomics.wait before assuming deadlock.
