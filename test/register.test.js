@@ -4,10 +4,7 @@
 import { describe, it } from 'node:test';
 import { execFileSync } from 'node:child_process';
 import { strict as assert } from 'node:assert';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { join } from 'node:path';
 
 /**
  * Run a subprocess test and parse its JSON output.
@@ -15,11 +12,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
  * @returns {any}
  */
 function runSubprocess(scriptFile) {
-  const scriptPath = join(__dirname, scriptFile);
+  const scriptPath = join(import.meta.dirname, scriptFile);
   const stdout = execFileSync(process.execPath, [scriptPath], {
     encoding: 'utf-8',
     timeout: 15_000,
-    cwd: join(__dirname, '..'),
+    cwd: join(import.meta.dirname, '..'),
     env: { ...process.env },
   });
   // Parse the last non-empty line as JSON (hooks may print warnings).
