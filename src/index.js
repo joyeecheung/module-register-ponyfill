@@ -364,6 +364,20 @@ export function register(specifier, parentURLOrOptions, options) {
 
   // Register the sync hooks once we know there are async hooks.
   ensureHooksRegistered();
+
+  // Return a handle that can deregister this hook -- a nice-to-have that
+  // the native module.register() does not offer.
+  const hookId = response.result ? response.result.hookId : -1;
+  return {
+    deregister() {
+      sendToWorker({ type: MSG.DEREGISTER, hookId });
+      const deregResponse = waitForWorkerResponse(MSG.DEREGISTER_RESULT);
+      if (deregResponse.result) {
+        hasResolveHooks = deregResponse.result.hasResolve;
+        hasLoadHooks = deregResponse.result.hasLoad;
+      }
+    },
+  };
 }
 
 /**

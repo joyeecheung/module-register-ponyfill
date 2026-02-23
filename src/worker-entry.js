@@ -74,6 +74,9 @@ async function handleMessage(msg) {
       case MSG.REGISTER:
         await handleRegister(msg);
         break;
+      case MSG.DEREGISTER:
+        handleDeregister(msg);
+        break;
       case MSG.RESOLVE_REQUEST:
         await handleResolve(msg);
         break;
@@ -102,10 +105,28 @@ async function handleRegister(msg) {
     await extracted.initialize(msg.data);
   }
 
+  const hookId = hooks.length;
+  extracted._id = hookId;
   hooks.push(extracted);
   sendResult(MSG.REGISTER_RESULT, {
+    hookId,
     hasResolve: typeof extracted.resolve === 'function',
     hasLoad: typeof extracted.load === 'function',
+  });
+}
+
+/**
+ * Deregister a previously registered hook module.
+ * @param {{ hookId: number }} msg
+ */
+function handleDeregister(msg) {
+  const idx = hooks.findIndex((h) => h._id === msg.hookId);
+  if (idx !== -1) {
+    hooks.splice(idx, 1);
+  }
+  sendResult(MSG.DEREGISTER_RESULT, {
+    hasResolve: hooks.some((h) => typeof h.resolve === 'function'),
+    hasLoad: hooks.some((h) => typeof h.load === 'function'),
   });
 }
 

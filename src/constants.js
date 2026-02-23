@@ -38,6 +38,11 @@ export const MSG = {
   // Main -> Worker: default load result
   DEFAULT_LOAD_RESULT: 'default-load-result',
 
+  // Main -> Worker: deregister a previously registered hook module
+  DEREGISTER: 'deregister',
+  // Worker -> Main: deregistration complete
+  DEREGISTER_RESULT: 'deregister-result',
+
   // Worker -> Main: error occurred
   ERROR: 'error',
   // Worker -> Main: hook promise never settled

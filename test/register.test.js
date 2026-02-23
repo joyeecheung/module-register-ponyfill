@@ -83,4 +83,10 @@ describe('module-register-ponyfill', () => {
     const result = runSubprocess('subprocess/ponyfill-test.mjs');
     assert.equal(result.message, 'hello from virtual module');
   });
+
+  it('deregister: removing a hook makes it stop participating in resolution', () => {
+    const result = runSubprocess('subprocess/deregister-test.mjs');
+    assert.equal(result.before, 'hello from virtual land');
+    assert.equal(result.deregistered, true);
+  });
 });

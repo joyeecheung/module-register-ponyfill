@@ -116,11 +116,24 @@ All `Atomics.wait()` calls use a 30-second timeout. If a hook hangs or the
 worker crashes silently, the caller receives a descriptive timeout error
 instead of deadlocking.
 
-## Known limitations
+## Differences from native `module.register()`
 
 - **Cross-hook loading effects unsupported**: Earlier `register()` calls do not affect the loading of later hook modules in the worker. In native Node.js, previously registered async hooks can affect how subsequent hook modules are loaded (e.g., a TypeScript hook enabling loading of a `.ts` hook module). This requires special handling internally in Node.js that is on the way of removal as it's very race-prone. This user-land ponyfill does not provide it - for something like this to work, it's recommended to just migrate to use the `module.registerHooks()` API.
 
 - **`globalPreload` not supported**: The deprecated `globalPreload` hook export is not recognized. Use `initialize` instead.
+
+### Bonus: `deregister()`
+
+Unlike the native `module.register()`, this ponyfill returns a handle with a `deregister()` method:
+
+```js
+const handle = register('./hooks.mjs', import.meta.url);
+
+// Later, remove the hook:
+handle.deregister();
+```
+
+This is possible because we control the hook chain in the worker. The native API has no equivalent.
 
 ## TypeScript
 

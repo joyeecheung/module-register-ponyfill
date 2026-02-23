@@ -24,8 +24,23 @@ export interface RegisterOptions {
 }
 
 /**
+ * Handle returned by `register()` that allows deregistering the hook.
+ * This is an extension not available in the native `module.register()` API.
+ */
+export interface RegisterReturn {
+  /**
+   * Remove this hook so it no longer participates in module resolution
+   * or loading.
+   */
+  deregister(): void;
+}
+
+/**
  * Register a module that exports hooks to customize Node.js module resolution
  * and loading. Drop-in replacement for `module.register()`.
+ *
+ * Returns a handle with a `deregister()` method -- an extension over the
+ * native API that lets you remove the hook at any time.
  *
  * @param specifier - Customization hooks module to register. If relative, it
  *   is resolved relative to `parentURL`.
@@ -36,11 +51,14 @@ export function register(
   specifier: string | URL,
   parentURL: string | URL,
   options?: RegisterOptions,
-): void;
+): RegisterReturn;
 
 /**
  * Register a module that exports hooks to customize Node.js module resolution
  * and loading. Drop-in replacement for `module.register()`.
+ *
+ * Returns a handle with a `deregister()` method -- an extension over the
+ * native API that lets you remove the hook at any time.
  *
  * @param specifier - Customization hooks module to register. If relative, it
  *   is resolved relative to `options.parentURL`.
@@ -49,4 +67,4 @@ export function register(
 export function register(
   specifier: string | URL,
   options?: RegisterOptions,
-): void;
+): RegisterReturn;
