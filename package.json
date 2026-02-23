@@ -20,6 +20,7 @@
   ],
   "scripts": {
     "test": "node --test 'test/*/test.mjs'",
+    "setup-reference": "node scripts/setup-reference.js",
     "lint": "biome check",
     "lint:changed": "biome check $(git diff --name-only main --diff-filter=ACMR)",
     "lint:fix": "biome check --fix",

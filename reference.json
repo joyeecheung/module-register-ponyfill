@@ -1,92 +1,114 @@
 [
   {
+    "name": "node",
+    "url": "https://github.com/nodejs/node",
+    "git": "https://github.com/nodejs/node.git",
+    "commit": "6b5178f7",
+    "description": "Node.js JavaScript runtime -- reference implementation for module.register() and registerHooks()"
+  },
+  {
     "name": "tsx",
     "url": "https://www.npmjs.com/package/tsx",
     "git": "https://github.com/privatenumber/tsx.git",
+    "commit": "938e46c21e2f1a5d654f8b7fb0d0a9a6390834ea",
     "description": "TypeScript Execute (tsx): Node.js enhanced with esbuild to run TypeScript & ESM files"
   },
   {
     "name": "ts-node",
     "url": "https://www.npmjs.com/package/ts-node",
     "git": "https://github.com/TypeStrong/ts-node.git",
+    "commit": "ddb05ef23be92a90c3ecac5a0220435c65ebbd2a",
     "description": "TypeScript execution environment and REPL for node.js, with source map support"
   },
   {
     "name": "@babel/register",
     "url": "https://www.npmjs.com/package/@babel/register",
     "git": "https://github.com/babel/babel.git",
+    "commit": "0db90d220934db37070fa1c37f30e62597d4af67",
     "description": "babel require hook"
   },
   {
     "name": "@swc-node/register",
     "url": "https://www.npmjs.com/package/@swc-node/register",
     "git": "https://github.com/swc-project/swc-node.git",
+    "commit": "2173129b3673e85795f0ead1d8bea2bb3159b291",
     "description": "SWC node register"
   },
   {
     "name": "import-in-the-middle",
     "url": "https://www.npmjs.com/package/import-in-the-middle",
     "git": "https://github.com/nodejs/import-in-the-middle.git",
+    "commit": "91f0b551b118b53aac93247a280a95bb0e59e820",
     "description": "Intercept imports in Node.js"
   },
   {
     "name": "@opentelemetry/instrumentation",
     "url": "https://www.npmjs.com/package/@opentelemetry/instrumentation",
     "git": "https://github.com/open-telemetry/opentelemetry-js.git",
+    "commit": "eb4cf32e7745e528af2f9baf40639f06ffff6eec",
     "description": "Base class for node which OpenTelemetry instrumentation modules extend"
   },
   {
     "name": "dd-trace",
     "url": "https://www.npmjs.com/package/dd-trace",
     "git": "https://github.com/DataDog/dd-trace-js.git",
+    "commit": "7ce79440d81e4dc5daa5109d53e1e0c7f83bb2bf",
     "description": "Datadog APM tracing client for JavaScript"
   },
   {
     "name": "@opentelemetry/auto-instrumentations-node",
     "url": "https://www.npmjs.com/package/@opentelemetry/auto-instrumentations-node",
     "git": "https://github.com/open-telemetry/opentelemetry-js-contrib.git",
+    "commit": "c43a1971ba9d5e0ff84071b169fb1747a1f3afe8",
     "description": "Metapackage which bundles opentelemetry node core and contrib instrumentations"
   },
   {
     "name": "newrelic",
     "url": "https://www.npmjs.com/package/newrelic",
     "git": "https://github.com/newrelic/node-newrelic.git",
+    "commit": "39d1d9a59ca467d71d4a7db4cf437d743a24939b",
     "description": "New Relic agent"
   },
   {
     "name": "elastic-apm-node",
     "url": "https://www.npmjs.com/package/elastic-apm-node",
     "git": "https://github.com/elastic/apm-agent-nodejs.git",
+    "commit": "724b18b7d975489e922850aa06f834e28f00b52e",
     "description": "The official Elastic APM agent for Node.js"
   },
   {
     "name": "jiti",
     "url": "https://www.npmjs.com/package/jiti",
     "git": "https://github.com/unjs/jiti.git",
+    "commit": "ddb4683d374ec18e396ab42f180ca21c7147b17b",
     "description": "Runtime TypeScript and ESM support for Node.js"
   },
   {
     "name": "tap",
     "url": "https://www.npmjs.com/package/tap",
     "git": "https://github.com/tapjs/tapjs.git",
+    "commit": "6f774b1133181e6062e2aca86596234c914cee4c",
     "description": "A Test-Anything-Protocol library for JavaScript"
   },
   {
     "name": "esmock",
     "url": "https://www.npmjs.com/package/esmock",
     "git": "https://github.com/iambumblehead/esmock.git",
+    "commit": "b444f95dc8d7eaaa4b79165caa94b941bc0a1297",
     "description": "provides native ESM import and globals mocking for unit tests"
   },
   {
     "name": "quibble",
     "url": "https://www.npmjs.com/package/quibble",
     "git": "https://github.com/testdouble/quibble.git",
+    "commit": "fac450e65d68a00411a7ed51fc29f19af581f95b",
     "description": "Makes it easy to replace require'd dependencies."
   },
   {
     "name": "@yarnpkg/pnp",
     "url": "https://www.npmjs.com/package/@yarnpkg/pnp",
     "git": "https://github.com/yarnpkg/berry.git",
+    "commit": "c5857bdee5737425b879492db5e2732a5e6e14f2",
     "description": "Yarn Plug'n'Play resolution engine"
   }
 ]
