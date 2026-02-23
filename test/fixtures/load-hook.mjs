@@ -1,17 +1,13 @@
-/**
- * Test: load hook transforms module source
- */
-import { register, waitForReady } from '../../index.js';
+// A simple load hook that intercepts .txt files and wraps them as ESM.
 
-register('./hooks/load-hook.mjs', {
-  parentURL: import.meta.url,
-});
-
-await waitForReady();
-
-try {
-  const mod = await import('./modules/sample.mjs');
-  console.log('module loaded:', mod.message);
-} catch (err) {
-  console.log('import failed:', err.message);
+export function load(url, context, nextLoad) {
+  if (url.endsWith('.txt')) {
+    const source = `export default ${JSON.stringify('content of fake txt')};`;
+    return {
+      format: 'module',
+      source,
+      shortCircuit: true,
+    };
+  }
+  return nextLoad(url, context);
 }

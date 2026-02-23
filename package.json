@@ -1,23 +1,34 @@
 {
-  "name": "userland-register",
-  "version": "1.0.0",
-  "description": "A userland polyfill for module.register() using module.registerHooks() and Worker threads",
-  "main": "index.js",
+  "name": "module-register-ponyfill",
+  "version": "0.1.0",
+  "description": "User-land ponyfill for module.register() built on top of module.registerHooks() + worker threads + Atomics",
   "type": "module",
   "exports": {
-    ".": "./index.js",
-    "./ponyfill": "./ponyfill.js"
+    ".": {
+      "types": "./src/index.d.ts",
+      "default": "./src/index.js"
+    },
+    "./ponyfill": {
+      "types": "./src/ponyfill.d.ts",
+      "default": "./src/ponyfill.js"
+    }
   },
   "files": [
-    "index.js",
-    "register.js",
-    "worker.js"
+    "src/"
   ],
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=22.15.0"
+  },
   "keywords": [
-    "esm",
-    "loader",
+    "module",
+    "register",
     "hooks",
-    "module"
+    "loader",
+    "ponyfill",
+    "esm"
   ],
   "license": "MIT"
 }
