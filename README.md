@@ -119,7 +119,9 @@ Multiple `register()` calls are supported. Hooks chain in LIFO order (last regis
 ```js
 register('./hook-a.mjs', import.meta.url);
 register('./hook-b.mjs', import.meta.url);
-// hook-b runs first, then hook-a, then the default
+// hook-b's resolve/load runs first. When it calls nextResolve/nextLoad,
+// hook-a runs. When hook-a calls next, the Node.js default runs.
+// Chain: hook-b -> hook-a -> default
 ```
 
 ## How it works
