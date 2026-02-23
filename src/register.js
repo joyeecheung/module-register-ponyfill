@@ -252,10 +252,10 @@ function runBidirectionalLoop(nextResolve, nextLoad, expectedResultType) {
           type: MSG.DEFAULT_RESOLVE_RESULT,
           result,
         });
-      } catch (err) {
+      } catch (error) {
         sendToWorker({
           type: MSG.DEFAULT_RESOLVE_RESULT,
-          error: serializeError(err),
+          error: serializeError(error),
         });
       }
       continue;
@@ -269,10 +269,10 @@ function runBidirectionalLoop(nextResolve, nextLoad, expectedResultType) {
           type: MSG.DEFAULT_LOAD_RESULT,
           result,
         });
-      } catch (err) {
+      } catch (error) {
         sendToWorker({
           type: MSG.DEFAULT_LOAD_RESULT,
-          error: serializeError(err),
+          error: serializeError(error),
         });
       }
     }

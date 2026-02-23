@@ -1,5 +1,5 @@
 import { test } from 'node:test';
-import { register } from '../../src/index.js';
+import { register } from '../../index.js';
 
 // Register hook-a first, then hook-b.
 // LIFO order means hook-b runs first (outermost), then hook-a.

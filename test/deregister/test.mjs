@@ -1,5 +1,5 @@
 import { test } from 'node:test';
-import { register } from '../../src/index.js';
+import { register } from '../../index.js';
 
 const handle = register('./hook.mjs', import.meta.url);
 

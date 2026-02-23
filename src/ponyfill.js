@@ -7,6 +7,6 @@
 //   // now module.register() uses the ponyfill
 
 import nodeModule from 'node:module';
-import { register } from './index.js';
+import { register } from './register.js';
 
 nodeModule.register = register;

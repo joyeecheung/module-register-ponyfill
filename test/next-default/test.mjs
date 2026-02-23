@@ -1,5 +1,5 @@
 import { test } from 'node:test';
-import { register } from '../../src/index.js';
+import { register } from '../../index.js';
 
 // This hook has both resolve and load, but calls nextResolve/nextLoad for
 // everything -- verifying bidirectional communication works.

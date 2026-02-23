@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import { MessageChannel } from 'node:worker_threads';
-import { register } from '../../src/index.js';
+import { register } from '../../index.js';
 
 const { port1, port2 } = new MessageChannel();
 

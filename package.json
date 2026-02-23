@@ -5,8 +5,8 @@
   "type": "module",
   "exports": {
     ".": {
-      "types": "./src/index.d.ts",
-      "default": "./src/index.js"
+      "types": "./index.d.ts",
+      "default": "./index.js"
     },
     "./ponyfill": {
       "types": "./src/ponyfill.d.ts",
@@ -14,6 +14,8 @@
     }
   },
   "files": [
+    "index.js",
+    "index.d.ts",
     "src/"
   ],
   "scripts": {
