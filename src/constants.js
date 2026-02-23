@@ -9,7 +9,9 @@ export const MAIN_TO_WORKER = 1;
 export const SHARED_MEMORY_BYTES = 2 * 4;
 
 // Maximum milliseconds to block on Atomics.wait before assuming deadlock.
-export const WAIT_TIMEOUT_MS = 30_000;
+// Configurable via the MODULE_REGISTER_TIMEOUT_MS environment variable.
+const envTimeout = Number(process.env.MODULE_REGISTER_TIMEOUT_MS);
+export const WAIT_TIMEOUT_MS = envTimeout > 0 ? envTimeout : 60_000;
 
 // Message types exchanged over the MessagePort.
 export const MSG = {
