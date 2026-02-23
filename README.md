@@ -16,7 +16,10 @@ npm install module-register-ponyfill
 
 ## Usage
 
-Replace `module.register()` calls with the ponyfill:
+### Direct import (ponyfill)
+
+Import `register` directly from the package instead of `node:module`. This is
+the simplest approach when you control the call sites:
 
 ```js
 // Before:
@@ -28,16 +31,32 @@ import { register } from 'module-register-ponyfill';
 register('./hooks.mjs', import.meta.url);
 ```
 
-Alternatively, import the ponyfill entry point to patch `module.register`
-in-place so that existing code works without changing import sites:
+### Polyfill (patch `node:module` in-place)
+
+Use the polyfill entry point to monkey-patch `module.register` so that
+existing code works without changing import sites.
+
+**Important:** The polyfill must be loaded _before_ any `register()` calls.
+
+The recommended approach is `--import`, which guarantees the polyfill runs
+before any application code is evaluated:
+
+```bash
+node --import module-register-ponyfill/polyfill your-app.js
+```
+
+Alternatively, use a static import placed before any module that calls
+`register()`:
 
 ```js
-import 'module-register-ponyfill/ponyfill';
+// Must come first -- patches module.register before other code runs.
+import 'module-register-ponyfill/polyfill';
 
-// Now module.register() uses the ponyfill.
 import { register } from 'node:module';
 register('./hooks.mjs', import.meta.url);
 ```
+
+### Calling conventions
 
 Both calling conventions are supported:
 
@@ -137,7 +156,7 @@ This is possible because we control the hook chain in the worker. The native API
 
 ## TypeScript
 
-Type definitions are included. Both the main export and the ponyfill entry
+Type definitions are included. Both the main export and the polyfill entry
 point are typed:
 
 ```ts

@@ -8,9 +8,9 @@
       "types": "./index.d.ts",
       "default": "./index.js"
     },
-    "./ponyfill": {
-      "types": "./src/ponyfill.d.ts",
-      "default": "./src/ponyfill.js"
+    "./polyfill": {
+      "types": "./src/polyfill.d.ts",
+      "default": "./src/polyfill.js"
     }
   },
   "files": [
