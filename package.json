@@ -19,7 +19,7 @@
     "src/"
   ],
   "scripts": {
-    "test": "node --test 'test/*/test.mjs' 'test/*/test.cjs'",
+    "test": "node --test-timeout 10 --test 'test/*/test.mjs' 'test/*/test.cjs'",
     "setup-reference": "node scripts/setup-reference.js",
     "lint": "biome check",
     "lint:changed": "biome check $(git diff --name-only main --diff-filter=ACMR)",
