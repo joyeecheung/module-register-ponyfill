@@ -126,7 +126,8 @@ register('./hook-b.mjs', import.meta.url);
 
 ## How it works
 
-1. On the first `register()` call, a single worker thread is spawned
+1. On the first `register()` call, a single worker thread is spawned (with
+   `execArgv: []` so `--require`/`--import` preloads are not re-executed)
 2. A pair of synchronous hooks is registered on the main thread via `module.registerHooks()`
 3. When a module is imported, the sync hooks proxy the request to the worker via `MessagePort` + `Atomics.wait`/`Atomics.notify`
 4. The worker runs the async hook chain (all registered hook modules)

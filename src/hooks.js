@@ -277,6 +277,9 @@ class AsyncLoaderHookWorker {
         port: channel.port2,
       },
       transferList: [channel.port2],
+      // Prevent inheriting --import/--require into the loader worker.
+      // FIXME: filter them out instead of eliminating all execArgv?
+      execArgv: [],
     });
 
     // Don't keep the process alive just for the hook worker.
