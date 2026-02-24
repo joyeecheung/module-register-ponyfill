@@ -18,14 +18,8 @@
 // - getAsyncLoaderHookWorker: singleton accessor (L792-L796).
 
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
-import {
-  MAIN_TO_WORKER,
-  MSG,
-  SHARED_MEMORY_BYTES,
-  WAIT_TIMEOUT_MS,
-  WORKER_TO_MAIN,
-} from './constants.js';
-import { deserializeError, serializeError } from './errors.js';
+import { MSG, SHARED_MEMORY_BYTES, WAIT_TIMEOUT_MS, WORKER_TO_MAIN } from './constants.js';
+import { deserializeError } from './errors.js';
 
 // ===========================================================================
 // AsyncLoaderHooksOnLoaderHookWorker (worker-thread side)
@@ -39,8 +33,8 @@ import { deserializeError, serializeError } from './errors.js';
  * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/hooks.js#L133-L480
  *
  * Key differences from Node.js:
- * - Default resolve/load delegate back to the main thread via Atomics instead
- *   of calling Node.js internal resolve/load directly.
+ * - Default resolve/load use captured built-in functions from registerHooks()
+ *   rather than calling Node.js internal resolve/load via private symbols.
  * - Supports deregister() (not available in native Node.js).
  * - Omits shortCircuit/chainFinished tracking and deep validation since the
  *   main-thread registerHooks() layer handles those.
@@ -48,7 +42,7 @@ import { deserializeError, serializeError } from './errors.js';
 export class AsyncLoaderHooksOnLoaderHookWorker {
   /**
    * LIFO hook chains. Each entry is a KeyedHook: { fn, url, next?, hookId? }.
-   * Index 0 is always the default (main-thread delegate).
+   * Index 0 is always the default (captured Node.js built-in).
    * New hooks are pushed to the end with `next` pointing to the previous tail.
    *
    * Mirrors #chains in Node.js:
@@ -65,22 +59,21 @@ export class AsyncLoaderHooksOnLoaderHookWorker {
   #nextHookId = 0;
 
   /**
-   * @param {MessagePort} port  Port connected to the main thread.
-   * @param {Int32Array} lock   Shared lock array for Atomics.
-   * @param {{ lastMainId: number }} state  Notification counter state.
+   * @param {Function} defaultResolve  Captured Node.js built-in resolve.
+   * @param {Function} defaultLoad     Captured Node.js built-in load.
    */
-  constructor(port, lock, state) {
+  constructor(defaultResolve, defaultLoad) {
     this.#chains = {
       resolve: [
         {
-          fn: createDefaultResolve(port, lock, state),
-          url: 'ponyfill:default-resolve',
+          fn: defaultResolve,
+          url: 'node:default-resolve',
         },
       ],
       load: [
         {
-          fn: createDefaultLoad(port, lock, state),
-          url: 'ponyfill:default-load',
+          fn: defaultLoad,
+          url: 'node:default-load',
         },
       ],
     };
@@ -211,10 +204,6 @@ export class AsyncLoaderHooksOnLoaderHookWorker {
  *
  * Key differences from Node.js:
  * - Uses a user-land Worker + MessagePort instead of InternalWorker + syncCommPort.
- * - Adds makeBidirectionalRequest() for bidirectional communication: when the
- *   worker's chain calls nextResolve/nextLoad to the default, the worker blocks
- *   while the main thread computes the default and sends the result back.
- *   In Node.js, the worker runs its own defaultResolve/defaultLoad directly.
  */
 class AsyncLoaderHookWorker {
   /**
@@ -284,6 +273,7 @@ class AsyncLoaderHookWorker {
 
     // Don't keep the process alive just for the hook worker.
     this.#worker.unref();
+    this.#port.unref();
 
     // Handle worker errors.
     this.#worker.on('error', (err) => {
@@ -343,28 +333,7 @@ class AsyncLoaderHookWorker {
   }
 
   /**
-   * Send a message to the worker and run the bidirectional wait loop.
-   *
-   * Unlike makeSyncRequest, this handles "default" requests from the worker
-   * (where the worker's hook chain called nextResolve/nextLoad to the default).
-   * This is unique to the ponyfill -- in Node.js, the worker runs its own
-   * default resolve/load directly.
-   *
-   * @param {object} msg
-   * @param {{ nextResolve?: Function, nextLoad?: Function }} defaultHandlers
-   *   Main-thread callbacks for handling the worker's default resolve/load
-   *   requests.
-   * @param {string} expectedResultType
-   * @returns {object} The unwrapped response (msg.result).
-   */
-  makeBidirectionalRequest(msg, defaultHandlers, expectedResultType) {
-    this.waitForWorker();
-    this.#sendToWorker(msg);
-    return this.#runBidirectionalLoop(defaultHandlers, expectedResultType);
-  }
-
-  /**
-   * Send a message to the worker and notify it.
+   * Send a message to the worker.
    *
    * @param {object} msg
    * @param {Transferable[]} [transferList]
@@ -375,8 +344,6 @@ class AsyncLoaderHookWorker {
     } else {
       this.#port.postMessage(msg);
     }
-    Atomics.add(this.#lock, MAIN_TO_WORKER, 1);
-    Atomics.notify(this.#lock, MAIN_TO_WORKER);
   }
 
   /**
@@ -418,72 +385,6 @@ class AsyncLoaderHookWorker {
       );
     }
     return msg;
-  }
-
-  /**
-   * Bidirectional wait loop: blocks main thread waiting for the worker,
-   * but also handles "default" requests from the worker (where the worker's
-   * hook chain called nextResolve/nextLoad all the way to the default).
-   *
-   * This is unique to the ponyfill. In Node.js, the worker runs the full hook
-   * chain including the built-in defaultResolve/defaultLoad directly. Here,
-   * the worker delegates "default" back to the main thread's nextResolve/
-   * nextLoad from registerHooks(), which is the correct default step when
-   * registerHooks() is in use.
-   *
-   * @param {{ nextResolve?: Function, nextLoad?: Function }} defaultHandlers
-   * @param {string} expectedResultType
-   * @returns {object}
-   */
-  #runBidirectionalLoop(defaultHandlers, expectedResultType) {
-    const { nextResolve, nextLoad } = defaultHandlers;
-
-    while (true) {
-      const msg = this.#receiveWorkerMessage();
-      if (!msg) continue;
-
-      if (msg.type === expectedResultType) {
-        // Final result from the worker's hook chain.
-        const result = msg.result;
-        result.shortCircuit = true;
-        return result;
-      }
-
-      if (msg.type === MSG.DEFAULT_RESOLVE_REQUEST && nextResolve) {
-        // Worker's chain called nextResolve() -- run main thread's default.
-        try {
-          const result = nextResolve(msg.specifier, msg.context);
-          this.#sendToWorker({
-            type: MSG.DEFAULT_RESOLVE_RESULT,
-            result,
-          });
-        } catch (error) {
-          this.#sendToWorker({
-            type: MSG.DEFAULT_RESOLVE_RESULT,
-            error: serializeError(error),
-          });
-        }
-        continue;
-      }
-
-      if (msg.type === MSG.DEFAULT_LOAD_REQUEST && nextLoad) {
-        // Worker's chain called nextLoad() -- run main thread's default.
-        try {
-          const result = nextLoad(msg.url, msg.context);
-          this.#sendToWorker({
-            type: MSG.DEFAULT_LOAD_RESULT,
-            result,
-          });
-        } catch (error) {
-          this.#sendToWorker({
-            type: MSG.DEFAULT_LOAD_RESULT,
-            error: serializeError(error),
-          });
-        }
-      }
-
-      // Unknown message -- ignore and keep waiting.
-    }
   }
 }
 
@@ -582,10 +483,6 @@ function getAsyncLoaderHookWorker() {
  * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/hooks.js#L802-L866
  *
  * Key differences from Node.js:
- * - resolveSync() and loadSync() accept a nextResolve/nextLoad callback for
- *   bidirectional communication with the worker (see makeBidirectionalRequest).
- *   In Node.js, these are simple makeSyncRequest proxies since the worker has
- *   its own default resolve/load.
  * - Includes deregister() (not available in native Node.js).
  */
 export class AsyncLoaderHooksProxiedToLoaderHookWorker {
@@ -624,19 +521,12 @@ export class AsyncLoaderHooksProxiedToLoaderHookWorker {
    * Mirrors AsyncLoaderHooksProxiedToLoaderHookWorker#resolveSync in Node.js:
    * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/hooks.js#L843-L845
    *
-   * Key difference: accepts nextResolve for bidirectional communication.
-   * In Node.js, this is a plain makeSyncRequest proxy since the worker has
-   * its own defaultResolve. Here, the worker delegates the default back to
-   * the main thread.
-   *
    * @param {string} specifier
    * @param {object} context
-   * @param {Function} nextResolve  Main thread's nextResolve from
-   *   registerHooks().
    * @returns {{ url: string, format?: string, importAttributes?: object }}
    */
-  resolveSync(specifier, context, nextResolve) {
-    return asyncLoaderHookWorker.makeBidirectionalRequest(
+  resolveSync(specifier, context) {
+    const result = asyncLoaderHookWorker.makeSyncRequest(
       {
         type: MSG.RESOLVE_REQUEST,
         specifier,
@@ -646,9 +536,10 @@ export class AsyncLoaderHooksProxiedToLoaderHookWorker {
           importAttributes: context.importAttributes,
         },
       },
-      { nextResolve },
       MSG.RESOLVE_RESULT,
     );
+    result.shortCircuit = true;
+    return result;
   }
 
   /**
@@ -657,15 +548,12 @@ export class AsyncLoaderHooksProxiedToLoaderHookWorker {
    * Mirrors AsyncLoaderHooksProxiedToLoaderHookWorker#loadSync in Node.js:
    * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/hooks.js#L857-L859
    *
-   * Key difference: accepts nextLoad for bidirectional communication.
-   *
    * @param {string} url
    * @param {object} context
-   * @param {Function} nextLoad  Main thread's nextLoad from registerHooks().
    * @returns {{ format: string, source?: string | ArrayBuffer | TypedArray }}
    */
-  loadSync(url, context, nextLoad) {
-    return asyncLoaderHookWorker.makeBidirectionalRequest(
+  loadSync(url, context) {
+    const result = asyncLoaderHookWorker.makeSyncRequest(
       {
         type: MSG.LOAD_REQUEST,
         url,
@@ -675,9 +563,10 @@ export class AsyncLoaderHooksProxiedToLoaderHookWorker {
           importAttributes: context.importAttributes,
         },
       },
-      { nextLoad },
       MSG.LOAD_RESULT,
     );
+    result.shortCircuit = true;
+    return result;
   }
 
   /**
@@ -722,96 +611,6 @@ function removeFromChain(chain, hookId) {
   // Rebuild next pointers after removal.
   for (let i = 1; i < chain.length; i++) {
     chain[i].next = chain[i - 1];
-  }
-}
-
-// ===========================================================================
-// Default resolve / load (ponyfill-specific, delegate to main thread)
-// ===========================================================================
-
-/**
- * Create a "default resolve" function that asks the main thread for the
- * default resolution result. This blocks the worker with Atomics.wait
- * until the main thread responds.
- *
- * In Node.js, the worker runs defaultResolve from internal/modules/esm/resolve
- * directly. Here, we delegate back to the main thread so the registerHooks()
- * chain's nextResolve provides the correct default.
- *
- * @param {MessagePort} port
- * @param {Int32Array} lock
- * @param {{ lastMainId: number }} state
- * @returns {(specifier: string, context: object) => object}
- */
-function createDefaultResolve(port, lock, state) {
-  return function defaultResolve(specifier, context) {
-    // Ask the main thread to run its nextResolve.
-    port.postMessage({
-      type: MSG.DEFAULT_RESOLVE_REQUEST,
-      specifier,
-      context,
-    });
-    Atomics.add(lock, WORKER_TO_MAIN, 1);
-    Atomics.notify(lock, WORKER_TO_MAIN);
-
-    // Block until main thread responds.
-    return waitForMainResponse(port, lock, state, MSG.DEFAULT_RESOLVE_RESULT);
-  };
-}
-
-/**
- * Create a "default load" function that asks the main thread for the
- * default load result.
- *
- * Same rationale as createDefaultResolve -- delegates to main thread
- * instead of running Node.js's defaultLoad locally.
- *
- * @param {MessagePort} port
- * @param {Int32Array} lock
- * @param {{ lastMainId: number }} state
- * @returns {(url: string, context: object) => object}
- */
-function createDefaultLoad(port, lock, state) {
-  return function defaultLoad(url, context) {
-    port.postMessage({
-      type: MSG.DEFAULT_LOAD_REQUEST,
-      url,
-      context,
-    });
-    Atomics.add(lock, WORKER_TO_MAIN, 1);
-    Atomics.notify(lock, WORKER_TO_MAIN);
-
-    return waitForMainResponse(port, lock, state, MSG.DEFAULT_LOAD_RESULT);
-  };
-}
-
-/**
- * Block the worker thread until a specific message type arrives from main.
- *
- * @param {MessagePort} port
- * @param {Int32Array} lock
- * @param {{ lastMainId: number }} state
- * @param {string} expectedType
- * @returns {object}
- */
-function waitForMainResponse(port, lock, state, expectedType) {
-  while (true) {
-    const waitResult = Atomics.wait(lock, MAIN_TO_WORKER, state.lastMainId, WAIT_TIMEOUT_MS);
-    if (waitResult === 'timed-out') {
-      throw new Error(`Timed out waiting for main thread response after ${WAIT_TIMEOUT_MS}ms.`);
-    }
-    state.lastMainId = Atomics.load(lock, MAIN_TO_WORKER);
-
-    const received = receiveMessageOnPort(port);
-    if (received) {
-      const msg = received.message;
-      if (msg.type === expectedType) {
-        if (msg.error) throw deserializeError(msg.error);
-        return msg.result;
-      }
-      // Unexpected message type -- should not happen in normal flow.
-      // Discard and keep waiting.
-    }
   }
 }
 

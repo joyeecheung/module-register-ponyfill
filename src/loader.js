@@ -106,9 +106,6 @@ class ModuleLoader {
    * Mirrors ModuleLoader#resolveAndMaybeBlockOnLoaderThread in Node.js:
    * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/loader.js#L710-L726
    *
-   * Key difference: accepts nextResolve (the registerHooks chain's next step)
-   * and passes it through for bidirectional communication with the worker.
-   *
    * @param {string} specifier
    * @param {object} context
    * @param {Function} nextResolve  registerHooks chain's next resolve.
@@ -116,7 +113,7 @@ class ModuleLoader {
    */
   #resolveAndMaybeBlockOnLoaderThread(specifier, context, nextResolve) {
     if (this.#asyncLoaderHooks && this.#hasResolveHooks) {
-      return this.#asyncLoaderHooks.resolveSync(specifier, context, nextResolve);
+      return this.#asyncLoaderHooks.resolveSync(specifier, context);
     }
     return nextResolve(specifier, context);
   }
@@ -135,7 +132,7 @@ class ModuleLoader {
    */
   #loadAndMaybeBlockOnLoaderThread(url, context, nextLoad) {
     if (this.#asyncLoaderHooks && this.#hasLoadHooks) {
-      return this.#asyncLoaderHooks.loadSync(url, context, nextLoad);
+      return this.#asyncLoaderHooks.loadSync(url, context);
     }
     return nextLoad(url, context);
   }

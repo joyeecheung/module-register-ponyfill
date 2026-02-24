@@ -126,12 +126,21 @@ register('./hook-b.mjs', import.meta.url);
 
 ## How it works
 
-1. On the first `register()` call, a single worker thread is spawned
-2. A pair of synchronous hooks is registered on the main thread via `module.registerHooks()`
-3. When a module is imported, the sync hooks proxy the request to the worker via `MessagePort` + `Atomics.wait`/`Atomics.notify`
-4. The worker runs the async hook chain (all registered hook modules)
-5. If the hook chain calls `nextResolve()`/`nextLoad()` all the way to the default, the worker delegates back to the main thread's `nextResolve`/`nextLoad` via bidirectional communication
-6. Results flow back to the main thread, which unblocks and returns them
+1. On the first `register()` call, a single worker thread is spawned (with
+   `execArgv: []` so `--require`/`--import` preloads are not re-executed)
+2. At startup the worker captures Node.js's built-in ESM `defaultResolve` /
+   `defaultLoad` by temporarily installing `registerHooks()` hooks that
+   intercept a known `data:` URL import, then deregisters them
+3. A pair of synchronous hooks is registered on the main thread via `module.registerHooks()`
+4. When a module is imported, the sync hooks proxy the request to the worker via `MessagePort` + `Atomics.wait`/`Atomics.notify`
+5. The worker runs the async hook chain (all registered hook modules)
+6. If the hook chain calls `nextResolve()`/`nextLoad()` all the way to the
+   default, the worker runs the captured built-in functions directly -- no
+   round-trip back to the main thread
+7. Results flow back to the main thread, which unblocks and returns them
+
+Both the worker thread and the main-thread `MessagePort` are `unref()`'d so
+the hook infrastructure never prevents the process from exiting naturally.
 
 All `Atomics.wait()` calls use a 60-second timeout by default. If a hook
 hangs or the worker crashes silently, the caller receives a descriptive

@@ -10,7 +10,12 @@
 // - Hook chain management is delegated to AsyncLoaderHooksOnLoaderHookWorker
 //   (in hooks.js), matching Node.js's architecture.
 // - We support deregister (not available in native Node.js).
+// - We capture Node.js's built-in defaultResolve/defaultLoad at startup via
+//   registerHooks(), so the worker's hook chains can call nextResolve/nextLoad
+//   without a round-trip to the main thread.
 
+import assert from 'node:assert';
+import { createRequire, registerHooks } from 'node:module';
 import { receiveMessageOnPort, workerData } from 'node:worker_threads';
 import { MSG, WORKER_TO_MAIN } from './constants.js';
 import { serializeError } from './errors.js';
@@ -19,14 +24,51 @@ import { AsyncLoaderHooksOnLoaderHookWorker } from './hooks.js';
 const { lock: lockBuffer, port } = workerData;
 const lock = new Int32Array(lockBuffer);
 
-// Mutable state: tracks the main thread's notification counter so we can
-// detect new notifications via Atomics.wait.
-const state = { lastMainId: 0 };
+// ---------------------------------------------------------------------------
+// Capture Node.js's built-in ESM defaultResolve / defaultLoad
+// ---------------------------------------------------------------------------
+// We register a temporary pair of sync hooks whose sole purpose is to steal
+// a reference to the `nextResolve` and `nextLoad` functions. These are the
+// real Node.js built-in resolve and load steps. Once captured, we deregister
+// the temporary hooks and use the captured functions as the default step at
+// the bottom of the async hook chain.
+
+let capturedDefaultResolve;
+let capturedDefaultLoad;
+
+// The exact data: URL imported by _trigger.js. We match on this so the
+// temporary hooks only capture from the specific import we control.
+const TRIGGER_URL = 'data:text/javascript,';
+
+const tempHookHandle = registerHooks({
+  resolve(specifier, context, nextResolve) {
+    if (specifier === TRIGGER_URL) {
+      capturedDefaultResolve = nextResolve;
+    }
+    return nextResolve(specifier, context);
+  },
+  load(url, context, nextLoad) {
+    if (url === TRIGGER_URL) {
+      capturedDefaultLoad = nextLoad;
+    }
+    return nextLoad(url, context);
+  },
+});
+
+// Require an ESM file that just statically imports TRIGGER_URL to hit the hooks via the
+// ESM path. After this, capturedDefaultResolve and capturedDefaultLoad hold the ESM
+// defaults.
+createRequire(import.meta.url)('./_trigger.js');
+
+// Remove the temporary hooks so they don't interfere with user hooks.
+tempHookHandle.deregister();
+assert.strictEqual(typeof capturedDefaultResolve, 'function');
+assert.strictEqual(typeof capturedDefaultLoad, 'function');
 
 // The loader instance that holds the hook chains and runs them.
 // Mirrors the AsyncLoaderHooksOnLoaderHookWorker instance in Node.js's worker:
 // https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L62
-const loader = new AsyncLoaderHooksOnLoaderHookWorker(port, lock, state);
+const loader = new AsyncLoaderHooksOnLoaderHookWorker(capturedDefaultResolve, capturedDefaultLoad);
 
 /**
  * Notify the main thread that a message is ready.
@@ -141,10 +183,14 @@ async function handleResolve(msg) {
 async function handleLoad(msg) {
   const result = await loader.load(msg.url, msg.context);
 
-  // Transfer ArrayBuffer/TypedArray sources to avoid copying.
+  // Normalize source: the ESM defaultLoad returns Buffers (which may use
+  // pooled ArrayBuffers that can't be transferred). Convert them to strings.
+  // User hooks that return ArrayBuffer/TypedArray are transferred directly.
   const transferList = [];
   if (result?.source) {
-    if (result.source instanceof ArrayBuffer) {
+    if (Buffer.isBuffer(result.source)) {
+      result.source = result.source.toString();
+    } else if (result.source instanceof ArrayBuffer) {
       transferList.push(result.source);
     } else if (ArrayBuffer.isView(result.source) && result.source.buffer instanceof ArrayBuffer) {
       transferList.push(result.source.buffer);
@@ -155,22 +201,26 @@ async function handleLoad(msg) {
 }
 
 // --- Message polling loop ---
-// Use dual-mode: event-based + setImmediate polling, mirroring Node.js's
-// checkForMessages pattern in the worker:
+// Mirrors Node.js's checkForMessages pattern in the worker:
 // https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/worker.js#L186-L195
+//
+// Every setImmediate is .unref()'d so the polling loop does not keep the
+// worker's event loop alive on its own. The port's 'message' listener keeps
+// the worker alive while the main-thread port is open; when the main process
+// exits, the port closes and the worker can exit too.
 
 let isProcessingMessage = false;
 
 function checkForMessages() {
   if (isProcessingMessage) {
-    setImmediate(checkForMessages);
+    setImmediate(checkForMessages).unref();
     return;
   }
   const received = receiveMessageOnPort(port);
   if (received) {
     processMessage(received.message);
   }
-  setImmediate(checkForMessages);
+  setImmediate(checkForMessages).unref();
 }
 
 function processMessage(msg) {
@@ -196,8 +246,8 @@ process.on('beforeExit', () => {
   notifyMain();
 });
 
-// Start polling loop.
-setImmediate(checkForMessages);
+// Start polling loop (unref'd -- does not keep event loop alive on its own).
+setImmediate(checkForMessages).unref();
 
 // Signal to the main thread that the worker is ready.
 notifyMain();
