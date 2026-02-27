@@ -148,9 +148,11 @@ MODULE_REGISTER_TIMEOUT_MS=120000 node your-app.js
 
 ## Unsupported features
 
-- **Cross-hook loading effects**: Earlier `register()` calls do not affect the loading of later hook modules in the worker. In native Node.js, previously registered async hooks can affect how subsequent hook modules are loaded (e.g., a TypeScript hook enabling loading of a `.ts` hook module). This requires special handling internally in Node.js that is on the way of removal as it's very race-prone. This user-land ponyfill does not provide it - for something like this to work, it's recommended to just migrate to use the `module.registerHooks()` API.
+- **Cross-hook loading effects**: Earlier `register()` calls do not affect the loading of later hook modules in the worker. In native Node.js, previously registered async hooks can affect how subsequent hook modules are loaded (e.g., a TypeScript hook enabling loading of a `.ts` hook module). This requires special handling internally in Node.js that is on the way of removal as it's very race-prone. This user-land ponyfill does not provide this behavior. If the loading of an asynchronous hook module needs to be customized, it's recommended to migrate to `module.registerHooks()` instead.
 
 - **`globalPreload`**: The deprecated `globalPreload` hook export is not recognized. Use `initialize` instead.
+
+- **Never-settling hooks**: when a hook returns a promise that never settles, in the native `module.register()` implementation, the process exits with code 13 or throws an `ERR_ASYNC_LOADER_REQUEST_NEVER_SETTLED` error. This ponyfill throws a timeout error after 60 seconds instead (configurable via `MODULE_REGISTER_TIMEOUT_MS`).
 
 ## Bonus features
 
