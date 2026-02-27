@@ -9,12 +9,19 @@
 // In Node.js, only WORKER_TO_MAIN_THREAD_NOTIFICATION exists (index 0) with a
 // single Int32. We add MAIN_TO_WORKER (index 1) for bidirectional blocking
 // because our worker needs to block on main-thread default resolve/load.
+// WORKER_EXIT_CODE (index 2) is set by the worker's process 'exit' handler
+// so the main thread can detect process.exit() calls and propagate the code.
 export const WORKER_TO_MAIN = 0;
 export const MAIN_TO_WORKER = 1;
+export const WORKER_EXIT_CODE = 2;
 
-// Total bytes: 2 x Int32 = 8 bytes.
+// Sentinel value stored in WORKER_EXIT_CODE when the worker has not exited.
+// We use -1 because process.exit codes are non-negative integers.
+export const EXIT_CODE_UNSET = -1;
+
+// Total bytes: 3 x Int32 = 12 bytes.
 // Node.js uses SHARED_MEMORY_BYTE_LENGTH = 1 * 4 (unidirectional).
-export const SHARED_MEMORY_BYTES = 2 * 4;
+export const SHARED_MEMORY_BYTES = 3 * 4;
 
 // Maximum milliseconds to block on Atomics.wait before assuming deadlock.
 // Configurable via the MODULE_REGISTER_TIMEOUT_MS environment variable.

@@ -12,12 +12,24 @@
 // - We support deregister (not available in native Node.js).
 
 import { receiveMessageOnPort, workerData } from 'node:worker_threads';
-import { MSG, WORKER_TO_MAIN } from './constants.js';
+import { EXIT_CODE_UNSET, MSG, WORKER_EXIT_CODE, WORKER_TO_MAIN } from './constants.js';
 import { serializeError } from './errors.js';
 import { AsyncLoaderHooksOnLoaderHookWorker } from './hooks.js';
 
 const { lock: lockBuffer, port } = workerData;
 const lock = new Int32Array(lockBuffer);
+
+// Initialize exit-code slot to "not exited".
+Atomics.store(lock, WORKER_EXIT_CODE, EXIT_CODE_UNSET);
+
+// When the worker process exits (including via process.exit()), write the exit
+// code to shared memory and wake the main thread so it can propagate the code
+// instead of hanging until the Atomics.wait timeout.
+process.on('exit', (code) => {
+  Atomics.store(lock, WORKER_EXIT_CODE, code);
+  Atomics.add(lock, WORKER_TO_MAIN, 1);
+  Atomics.notify(lock, WORKER_TO_MAIN);
+});
 
 // Mutable state: tracks the main thread's notification counter so we can
 // detect new notifications via Atomics.wait.

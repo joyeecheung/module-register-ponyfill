@@ -19,10 +19,12 @@
 
 import { MessageChannel, receiveMessageOnPort, Worker } from 'node:worker_threads';
 import {
+  EXIT_CODE_UNSET,
   MAIN_TO_WORKER,
   MSG,
   SHARED_MEMORY_BYTES,
   WAIT_TIMEOUT_MS,
+  WORKER_EXIT_CODE,
   WORKER_TO_MAIN,
 } from './constants.js';
 import { deserializeError, serializeError } from './errors.js';
@@ -310,6 +312,14 @@ class AsyncLoaderHookWorker {
     if (this.#isReady) return;
 
     const readyResult = Atomics.wait(this.#lock, WORKER_TO_MAIN, 0, WAIT_TIMEOUT_MS);
+
+    // Check if the worker exited before becoming ready (e.g. top-level
+    // process.exit() in the hook module).
+    const exitCode = Atomics.load(this.#lock, WORKER_EXIT_CODE);
+    if (exitCode !== EXIT_CODE_UNSET) {
+      process.exit(exitCode);
+    }
+
     if (readyResult === 'timed-out') {
       throw new Error(
         `Timed out waiting for hook worker to become ready after ${WAIT_TIMEOUT_MS}ms.`,
@@ -382,8 +392,9 @@ class AsyncLoaderHookWorker {
   /**
    * Block until the worker sends a notification, then receive and unwrap the
    * next message from the port. Throws on timeout, ERROR, or NEVER_SETTLE.
-   * Returns null if no message was available after the atomic notification
-   * (rare race) -- callers should retry.
+   * If the worker called process.exit(), propagates the exit code to the
+   * main process. Returns null if no message was available after the atomic
+   * notification (rare race) -- callers should retry.
    *
    * Mirrors the wait + #unwrapMessage pattern in Node.js:
    * https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/hooks.js#L633-L667
@@ -397,6 +408,15 @@ class AsyncLoaderHookWorker {
       this.#workerNotificationLastId,
       WAIT_TIMEOUT_MS,
     );
+
+    // Check if the worker exited (e.g. via process.exit()).
+    // The worker's 'exit' handler writes the code to shared memory and
+    // notifies us, so we detect it immediately instead of timing out.
+    const exitCode = Atomics.load(this.#lock, WORKER_EXIT_CODE);
+    if (exitCode !== EXIT_CODE_UNSET) {
+      process.exit(exitCode);
+    }
+
     if (waitResult === 'timed-out') {
       throw new Error(
         'Timed out waiting for hook worker response ' +
