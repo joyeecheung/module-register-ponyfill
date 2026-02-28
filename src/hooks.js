@@ -858,7 +858,10 @@ function validateLoadResult(result) {
   if (!result || typeof result !== 'object') {
     throw new TypeError('load hook must return an object');
   }
-  if (typeof result.format !== 'string') {
+  // format may be undefined when the default load (registerHooks nextLoad)
+  // returns without a format, e.g. for CJS modules. The registerHooks layer
+  // on the main thread handles format detection, so we allow it through.
+  if (result.format != null && typeof result.format !== 'string') {
     throw new TypeError('load hook must return an object with a "format" string property');
   }
 }
