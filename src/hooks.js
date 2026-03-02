@@ -273,6 +273,23 @@ class AsyncLoaderHookWorker {
     this.#port = channel.port1;
 
     const workerURL = new URL('./worker.js', import.meta.url);
+
+    // Build a sanitized NODE_OPTIONS that strips --import/--require flags
+    // so the preload scripts are not re-executed inside the loader worker.
+    // execArgv:[] handles command-line flags, but NODE_OPTIONS is a separate
+    // env var that Node.js processes independently.
+    // FIXME: this is a bit hacky. Alternatively, just make the ponyfill a no-op from
+    // within the loader worker?
+    const workerEnv = { ...process.env };
+    if (workerEnv.NODE_OPTIONS) {
+      workerEnv.NODE_OPTIONS = workerEnv.NODE_OPTIONS.replace(/--import\s+\S+/g, '')
+        .replace(/--require\s+\S+/g, '')
+        .trim();
+      if (!workerEnv.NODE_OPTIONS) {
+        delete workerEnv.NODE_OPTIONS;
+      }
+    }
+
     this.#worker = new Worker(workerURL, {
       workerData: {
         lock: sharedBuffer,
@@ -282,6 +299,7 @@ class AsyncLoaderHookWorker {
       // Prevent inheriting --import/--require into the loader worker.
       // FIXME: filter them out instead of eliminating all execArgv?
       execArgv: [],
+      env: workerEnv,
     });
 
     // Don't keep the process alive just for the hook worker.
