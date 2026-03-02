@@ -132,6 +132,7 @@ register('./hook-b.mjs', import.meta.url);
 3. When a module is imported, the sync hooks proxy the request to the worker via `MessagePort` + `Atomics.wait`/`Atomics.notify`
 4. The worker runs the async hook chain (all registered hook modules)
 5. If the hook chain calls `nextResolve()`/`nextLoad()` all the way to the default, the worker delegates back to the main thread's `nextResolve`/`nextLoad` via bidirectional communication
+   - Note: this is different from the native `module.register()`, which delegates to the loader thread's default resolver/loader for the final step. It's currently an open question which behavior is more desirable and whether this new behavior is worth keeping or made configurable.
 6. Results flow back to the main thread, which unblocks and returns them
 
 All `Atomics.wait()` calls use a 60-second timeout by default. If a hook
@@ -172,6 +173,13 @@ This is possible because we control the hook chain in the worker. The native API
 ### Timeout on deadlock
 
 All `Atomics.wait()` calls use a 60-second timeout by default. If a hook hangs or the worker crashes silently, the caller receives a descriptive error instead of deadlocking forever. The timeout is configurable via `MODULE_REGISTER_TIMEOUT_MS` (see above). Native `module.register()` has no such safeguard.
+
+### TODOs
+
+- [ ] Explore support for cross-hook loading effects on the loader worker.
+- [ ] Investigate whether delegating to the main thread's default resolver/loader (instead of the worker's) is desirable or whether it should be made configurable.
+- [ ] Smarter handling of `--import`/`--require` inheritance in the loader worker.
+- [ ] Test `require.resolve()` (depends on https://github.com/nodejs/node/pull/62028)
 
 ## TypeScript
 
