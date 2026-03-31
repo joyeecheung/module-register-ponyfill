@@ -3,6 +3,15 @@
 // Reference: Node.js shared_constants.js
 // https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/shared_constants.js
 
+import { workerData } from 'node:worker_threads';
+
+// True when running inside the ponyfill's own loader hook worker thread.
+// Used to make register() a no-op and prevent recursive worker spawning.
+//
+// This is the userland equivalent of Node.js's internal
+// shouldSpawnLoaderHookWorker = false.
+export const isPonyfillLoaderWorker = !!workerData?.__ponyfillLoaderWorker;
+
 // Int32Array indices in the SharedArrayBuffer.
 // Each is a monotonically increasing notification counter.
 //

@@ -126,13 +126,15 @@ register('./hook-b.mjs', import.meta.url);
 
 ## How it works
 
-1. On the first `register()` call, a single worker thread is spawned (with
-   `execArgv: []` so `--require`/`--import` preloads are not re-executed)
+1. On the first `register()` call, a single worker thread is spawned.
+   The Worker omits the `execArgv` option so it inherits the parent's full
+   `execArgv` (matching Node.js's internal loader worker). `NODE_OPTIONS`
+   is filtered to strip `--import`/`--loader`/`--experimental-loader` while
+   preserving `--require`
 2. A pair of synchronous hooks is registered on the main thread via `module.registerHooks()`
 3. When a module is imported, the sync hooks proxy the request to the worker via `MessagePort` + `Atomics.wait`/`Atomics.notify`
 4. The worker runs the async hook chain (all registered hook modules)
 5. If the hook chain calls `nextResolve()`/`nextLoad()` all the way to the default, the worker delegates back to the main thread's `nextResolve`/`nextLoad` via bidirectional communication
-   - Note: this is different from the native `module.register()`, which delegates to the loader thread's default resolver/loader for the final step. It's currently an open question which behavior is more desirable and whether this new behavior is worth keeping or made configurable.
 6. Results flow back to the main thread, which unblocks and returns them
 
 All `Atomics.wait()` calls use a 60-second timeout by default. If a hook
@@ -147,12 +149,13 @@ variable:
 MODULE_REGISTER_TIMEOUT_MS=120000 node your-app.js
 ```
 
-## Unsupported features
+## Known divergences from native `module.register()`
 
+- `--import` preloads inherited via `execArgv` will also run in the ponyfill's loader worker, whereas the built-in `module.register()` only runs them on the main thread. There's a guard prevents recursion, but for other preloaded modules this is observable. The divergence is blocked on [nodejs/node#41103](https://github.com/nodejs/node/issues/41103).
+- When a hook chain calls `nextResolve()`/`nextLoad()` all the way to the default, the ponyfill delegates back to the main thread's `registerHooks()` `nextResolve`/`nextLoad`. In native `module.register()`, the default resolve/load runs on the loader thread instead.
+  - It's currently an open question which behavior is more desirable and whether this new behavior is worth keeping or made configurable.
 - **Cross-hook loading effects**: Earlier `register()` calls do not affect the loading of later hook modules in the worker. In native Node.js, previously registered async hooks can affect how subsequent hook modules are loaded (e.g., a TypeScript hook enabling loading of a `.ts` hook module). This requires special handling internally in Node.js that is on the way of removal as it's very race-prone. This user-land ponyfill does not provide this behavior. If the loading of an asynchronous hook module needs to be customized, it's recommended to migrate to `module.registerHooks()` instead.
-
 - **`globalPreload`**: The deprecated `globalPreload` hook export is not recognized. Use `initialize` instead.
-
 - **Never-settling hooks**: when a hook returns a promise that never settles, in the native `module.register()` implementation, the process exits with code 13 or throws an `ERR_ASYNC_LOADER_REQUEST_NEVER_SETTLED` error. This ponyfill throws a timeout error after 60 seconds instead (configurable via `MODULE_REGISTER_TIMEOUT_MS`).
 
 ## Bonus features
@@ -178,7 +181,7 @@ All `Atomics.wait()` calls use a 60-second timeout by default. If a hook hangs o
 
 - [ ] Explore support for cross-hook loading effects on the loader worker.
 - [ ] Investigate whether delegating to the main thread's default resolver/loader (instead of the worker's) is desirable or whether it should be made configurable.
-- [ ] Smarter handling of `--import`/`--require` inheritance in the loader worker.
+- [ ] Eliminate `--import` divergence in loader worker once [nodejs/node#41103](https://github.com/nodejs/node/issues/41103) is resolved (would allow explicit `execArgv` filtering).
 - [ ] Test `require.resolve()` (depends on https://github.com/nodejs/node/pull/62028)
 
 ## TypeScript

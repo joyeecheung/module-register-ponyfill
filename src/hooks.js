@@ -274,16 +274,18 @@ class AsyncLoaderHookWorker {
 
     const workerURL = new URL('./worker.js', import.meta.url);
 
-    // Build a sanitized NODE_OPTIONS that strips --import/--require flags
-    // so the preload scripts are not re-executed inside the loader worker.
-    // execArgv:[] handles command-line flags, but NODE_OPTIONS is a separate
-    // env var that Node.js processes independently.
-    // FIXME: this is a bit hacky. Alternatively, just make the ponyfill a no-op from
-    // within the loader worker?
+    // Build a sanitized NODE_OPTIONS that strips flags the loader worker
+    // should not process. --import is not processed by Node.js's loader
+    // worker (only via run_main.js). --loader/--experimental-loader would
+    // spawn Node.js's internal loader worker inside ours. --require is
+    // preserved (Node.js runs it in the loader worker via loadPreloadModules).
     const workerEnv = { ...process.env };
     if (workerEnv.NODE_OPTIONS) {
-      workerEnv.NODE_OPTIONS = workerEnv.NODE_OPTIONS.replace(/--import\s+\S+/g, '')
-        .replace(/--require\s+\S+/g, '')
+      workerEnv.NODE_OPTIONS = workerEnv.NODE_OPTIONS.replace(
+        /--(?:import|loader|experimental-loader)(?:=\S+|\s+\S+)/g,
+        '',
+      )
+        .replace(/\s+/g, ' ')
         .trim();
       if (!workerEnv.NODE_OPTIONS) {
         delete workerEnv.NODE_OPTIONS;
@@ -294,11 +296,26 @@ class AsyncLoaderHookWorker {
       workerData: {
         lock: sharedBuffer,
         port: channel.port2,
+        __ponyfillLoaderWorker: true,
       },
       transferList: [channel.port2],
-      // Prevent inheriting --import/--require into the loader worker.
-      // FIXME: filter them out instead of eliminating all execArgv?
-      execArgv: [],
+      // Omit execArgv so the Worker inherits process.execArgv. This matches how
+      // Node.js's InternalWorker inherits exec_argv.
+      // See https://github.com/nodejs/node/issues/41103
+      //
+      // We CANNOT filter process.execArgv and pass it explicitly because
+      // standard Workers validate execArgv entries and reject process-level
+      // flags (e.g. --v8-pool-size, --tls-cipher-list, --stack-trace-limit)
+      // that may be present when running under test runners or tooling.
+      //
+      // Consequence: --import preloads from execArgv will run inside the
+      // worker during bootstrap. The workerData.__ponyfillLoaderWorker guard
+      // in register.js and polyfill.js prevents recursion. This is a known
+      // divergence from Node.js (which does not run --import in the loader
+      // worker). Similarly, --loader/--experimental-loader will activate
+      // Node.js's internal loader worker inside ours (wasteful but
+      // functional). NODE_OPTIONS is separately filtered above to prevent
+      // the env-var path for these flags.
       env: workerEnv,
     });
 

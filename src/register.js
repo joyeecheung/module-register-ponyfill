@@ -9,6 +9,7 @@
 // ModuleLoader class with its lazy AsyncLoaderHooksProxiedToLoaderHookWorker
 // creation pattern.
 
+import { isPonyfillLoaderWorker } from './constants.js';
 import { getOrInitializeModuleLoader } from './loader.js';
 
 /**
@@ -27,6 +28,13 @@ import { getOrInitializeModuleLoader } from './loader.js';
  * @param {object} [options]
  */
 export function register(specifier, parentURLOrOptions, options) {
+  // In Node.js, calling register() inside the loader worker is handled by
+  // shouldSpawnLoaderHookWorker = false -- it registers hooks in-thread
+  // without spawning another worker. The ponyfill cannot do async in-thread
+  // hook customization (the worker IS the async hooks thread), so this is
+  // a no-op. This allows --require preloads that call register() to run
+  // safely inside the loader worker without causing infinite recursion.
+  if (isPonyfillLoaderWorker) return;
   // Normalize arguments -- mirrors Node.js's register() argument parsing.
   // https://github.com/nodejs/node/blob/6b5178f7/lib/internal/modules/esm/loader.js#L956-L960
   let parentURL;
